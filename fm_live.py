@@ -280,6 +280,8 @@ def run_app():
     def persist():
         cfg["maxes"] = sess.maxes
         cfg["targets"] = {k: list(v) for k, v in sess.targets.items()}
+        if state.get("item"):
+            cfg.setdefault("targets_by_item", {})[fm_core.norm(state["item"])] = cfg["targets"]
         cfg["max_fix"] = max_fix
         cfg["region"] = state["region"]
         cfg["hist_region"] = state["hist_region"]
@@ -295,14 +297,13 @@ def run_app():
             persist()
             refresh()
             return
-        if not e_hi.get().strip():
-            e_hi.insert(0, e_lo.get())
-        if not e_lo.get().strip():
-            e_lo.insert(0, e_hi.get())
+        t_lo, t_hi = e_lo.get().strip(), e_hi.get().strip()
         try:
-            lo, hi = int(e_lo.get()), int(e_hi.get())
+            lo = int(t_lo or t_hi)
+            hi = int(t_hi or t_lo)
         except ValueError:
             return
+        e_lo.dirty = e_hi.dirty = False
         hi = max(lo, hi)
         if sess.target(stat) != (lo, hi):
             m = sess.maxes.get(stat, 0)
@@ -338,6 +339,63 @@ def run_app():
                 w.config(bg=colors[n])
             root.after(140, flash, n + 1)
 
+    rows = {}
+
+    def set_entry(e, val):
+        """Met à jour une case sans écraser ce que le joueur est en train de taper."""
+        if getattr(e, "dirty", False) or root.focus_get() is e:
+            return
+        if e.get() != str(val):
+            e.delete(0, "end")
+            e.insert(0, str(val))
+
+    def make_entry(on_commit):
+        e = tk.Entry(lines_fr, width=5, font=F["txt"], bg=BG2, fg=FG, insertbackground=FG, relief="flat", justify="center")
+        e.dirty = False
+
+        def typed(ev):
+            if ev.keysym not in ("Return", "Tab", "KP_Enter"):
+                e.dirty = True
+
+        def commit(ev=None):
+            if e.dirty:
+                e.dirty = False
+                on_commit()
+        e.bind("<KeyRelease>", typed)
+        e.bind("<Return>", commit)
+        e.bind("<KP_Enter>", commit)
+        e.bind("<FocusOut>", commit)
+        return e
+
+    def build_table(order):
+        rows.clear()
+        for w in lines_fr.winfo_children():
+            w.destroy()
+        for j, h in enumerate(("Stat", "Actuel", "Max jeu", "Min voulu", "Max voulu", "", "SC")):
+            tk.Label(lines_fr, text=h, fg=MUT, bg=BG, font=F["small"], anchor="w").grid(row=0, column=j, sticky="w", padx=3)
+        for i, s in enumerate(order, start=1):
+            r = {}
+            r["name"] = tk.Label(lines_fr, text=s, fg=FG, bg=BG, font=F["txt"], anchor="w")
+            r["name"].grid(row=i, column=0, sticky="we")
+            r["val"] = tk.Label(lines_fr, text="", bg=BG, font=F["bold"], width=5)
+            r["val"].grid(row=i, column=1, sticky="we")
+            r["max"] = make_entry(lambda s=s: set_game_max(s, rows[s]["max"]))
+            r["max"].grid(row=i, column=2, padx=2, pady=1)
+            r["lo"] = make_entry(lambda s=s: set_target(s, rows[s]["lo"], rows[s]["hi"]))
+            r["lo"].grid(row=i, column=3, padx=2, pady=1)
+            r["hi"] = make_entry(lambda s=s: set_target(s, rows[s]["lo"], rows[s]["hi"]))
+            r["hi"].grid(row=i, column=4, padx=2, pady=1)
+            r["etat"] = tk.Label(lines_fr, text="", bg=BG, font=F["bold"], width=9, anchor="w")
+            r["etat"].grid(row=i, column=5, sticky="we")
+            r["sc"] = tk.Label(lines_fr, text="", bg=BG, font=F["small"], width=5)
+            r["sc"].grid(row=i, column=6, sticky="we")
+            rows[s] = r
+        if order:
+            tk.Label(lines_fr, text="Tape tes valeurs : validé avec Entrée ou en cliquant ailleurs. Max jeu faux ? Corrige-le (vide = relu à l'écran).",
+                     fg=MUT, bg=BG, font=F["small"], anchor="w", wraplength=300, justify="left").grid(
+                row=len(order) + 1, column=0, columnspan=4, sticky="w", pady=(4, 0))
+            btn(lines_fr, "↺ Max du jeu partout", reset_targets).grid(row=len(order) + 1, column=4, columnspan=3, sticky="e", pady=(4, 0))
+
     def refresh():
         rune, why = sess.advise()
         done = rune.startswith("✅")
@@ -358,11 +416,12 @@ def run_app():
                 l.config(text="")
         puits_lbl.config(text=f"Reliquat : {sess.puits:g}".replace(".", ","))
         target = rune.split(" sur ")[-1] if " sur " in rune else None
-        for w in lines_fr.winfo_children():
-            w.destroy()
-        for j, h in enumerate(("Stat", "Actuel", "Max jeu", "Min voulu", "Max voulu", "", "SC")):
-            tk.Label(lines_fr, text=h, fg=MUT, bg=BG, font=F["small"], anchor="w").grid(row=0, column=j, sticky="w", padx=3)
+        key = tuple(sess.values)
+        if key != state.get("rows_key"):
+            build_table(key)
+            state["rows_key"] = key
         for i, (s, v) in enumerate(sess.values.items(), start=1):
+            r = rows[s]
             m = sess.maxes.get(s, 0)
             lo, hi = sess.target(s)
             rbg = "#4a3818" if s == target else (BG2 if i % 2 else BG)
@@ -372,37 +431,21 @@ def run_app():
                 etat, col = f"✔ over +{v - m}", BLUE
             else:
                 etat, col = "✔", OK
-            fnt = F["bold"] if s == target else F["txt"]
-            tk.Label(lines_fr, text=("▶ " if s == target else "") + s, fg=FG, bg=rbg, font=fnt, anchor="w").grid(row=i, column=0, sticky="we")
-            tk.Label(lines_fr, text=str(v), fg=col, bg=rbg, font=F["bold"], width=5).grid(row=i, column=1, sticky="we")
+            r["name"].config(text=("▶ " if s == target else "") + s, bg=rbg, font=F["bold"] if s == target else F["txt"])
+            r["val"].config(text=str(v), fg=col, bg=rbg)
             fixed = s in max_fix
-            em = tk.Entry(lines_fr, width=5, font=F["bold"] if fixed else F["txt"], bg="#4a2e2e" if fixed else rbg,
-                          fg=FG if fixed else MUT, insertbackground=FG, relief="flat", justify="center")
-            em.insert(0, str(m))
-            em.bind("<Return>", lambda ev, s=s, e=em: set_game_max(s, e))
-            em.grid(row=i, column=2, padx=2, pady=1)
+            r["max"].config(font=F["bold"] if fixed else F["txt"], bg="#4a2e2e" if fixed else rbg, fg=FG if fixed else MUT)
+            set_entry(r["max"], m)
             custom = s in sess.targets
-            ents = []
-            for col_i, val in ((3, lo), (4, hi)):
-                e = tk.Entry(lines_fr, width=5, font=F["bold"] if custom else F["txt"], bg="#2e3a4a" if custom else BG2,
-                             fg=FG, insertbackground=FG, relief="flat", justify="center")
-                e.insert(0, str(val))
-                e.grid(row=i, column=col_i, padx=2, pady=1)
-                ents.append(e)
-            for e in ents:
-                e.bind("<Return>", lambda ev, s=s, a=ents[0], b=ents[1]: set_target(s, a, b))
-                e.bind("<Tab>", lambda ev, s=s, a=ents[0], b=ents[1]: set_target(s, a, b))
-            tk.Label(lines_fr, text=etat, fg=col, bg=rbg, font=F["bold"], width=9, anchor="w").grid(row=i, column=5, sticky="we")
+            for e, val in ((r["lo"], lo), (r["hi"], hi)):
+                e.config(font=F["bold"] if custom else F["txt"], bg="#2e3a4a" if custom else BG2)
+                set_entry(e, val)
+            r["etat"].config(text=etat, fg=col, bg=rbg)
             if s in fm_core.STATS:
                 gap = max(1, hi - v) if v < hi else 1
                 rr = fm_core.smart_rune(s, gap, sess.values, sess.maxes, sess.level, sess.mins)
                 scl = fm_core.chances(sess.values, sess.maxes, s, rr, sess.level, sess.mins)[0]
-                tk.Label(lines_fr, text=f"{scl:.0f}%", fg=OK if scl >= 30 else GOLD if scl >= 10 else RED,
-                         bg=rbg, font=F["small"], width=5).grid(row=i, column=6, sticky="we")
-        if sess.values:
-            tk.Label(lines_fr, text="Tape tes valeurs puis Entrée. Max jeu faux ? Corrige-le (vide = relu à l'écran).", fg=MUT, bg=BG,
-                     font=F["small"], anchor="w").grid(row=len(sess.values) + 1, column=0, columnspan=4, sticky="w", pady=(4, 0))
-            btn(lines_fr, "↺ Max du jeu partout", reset_targets).grid(row=len(sess.values) + 1, column=4, columnspan=2, sticky="e", pady=(4, 0))
+                r["sc"].config(text=f"{scl:.0f}%", fg=OK if scl >= 30 else GOLD if scl >= 10 else RED, bg=rbg)
         lines_fr.grid_columnconfigure(0, weight=1)
         extra = [x for x in OVER_EXTRA if x not in sess.values]
         over_stat.config(values=extra + list(sess.values))
@@ -553,15 +596,31 @@ def run_app():
         if not text:
             return
         item, entries = fm_core.parse_history(text)
-        # nouvel objet posé -> on repart à zéro
-        if item and state["item"] and fm_core.norm(item) != fm_core.norm(state["item"]):
-            goal, ost, otg = sess.goal, sess.over_stat, sess.over_target
+        # Un AUTRE nom d'objet doit être lu 3 fois d'affilée avant d'y croire :
+        # une seule capture mal lue ne doit pas tout remettre à zéro (fourchettes comprises).
+        if item and state["item"] and not fm_core.same_item(item, state["item"]):
+            cand = state.get("item_cand")
+            if cand and fm_core.same_item(item, cand[0]):
+                state["item_cand"] = (cand[0], cand[1] + 1)
+            else:
+                state["item_cand"] = (item, 1)
+            if state["item_cand"][1] < 3:
+                item = None  # on ignore ce nom pour l'instant
+        else:
+            state["item_cand"] = None
+        if item and state["item"] and not fm_core.same_item(item, state["item"]):
+            state["item_cand"] = None
+            persist()  # garde les fourchettes de l'ancien objet
+            goal, ost, otg, lvl = sess.goal, sess.over_stat, sess.over_target, sess.level
             sess.__init__()
-            sess.goal, sess.over_stat, sess.over_target = goal, ost, otg
+            sess.goal, sess.over_stat, sess.over_target, sess.level = goal, ost, otg, lvl
+            saved = cfg.get("targets_by_item", {}).get(fm_core.norm(item))
+            if saved:
+                sess.targets.update({k: tuple(v) for k, v in saved.items()})
             state["known"].clear(); state["miss"].clear(); state["stable"] = None; state["order"] = []
             state["hist"] = []
             sess.log.insert(0, f"🎮 Nouvel objet : {item}")
-        if item:
+        if item and (not state["item"] or not fm_core.same_item(item, state["item"])):
             state["item"] = item
             root.title(f"Assistant FM v{VERSION} – {item.title()}")
         # 2 lectures identiques d'affilée avant d'y croire (une ligne mal lue ne crée pas de faux résultat)

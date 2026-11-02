@@ -1,8 +1,9 @@
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 # Projet GitHub d'où viennent les mises à jour (« propriétaire/nom »). Rempli une fois le dépôt créé.
 GITHUB_REPO = "Maxi-montelle/assistant-fm"
 
 CHANGELOG = """\
+1.0.1 — Les min / max voulus ne se remettent plus au max du jeu.
 1.0.0 — Première version en application (.exe) :
 • lecture de toute la fenêtre de FM (tableau, reliquat, historique)
 • fourchettes min / max voulues par ligne, over (dont % Do sorts), exo PA / PM / PO

@@ -114,6 +114,11 @@ def parse_lines(ocr_text, ranges=None, mins=None):
     return found
 
 
+def same_item(a, b):
+    """Même objet malgré une erreur de lecture (« HEAUME DE GUERRE » / « HEAUME DE GUERRF »)."""
+    return difflib.SequenceMatcher(None, norm(a), norm(b)).ratio() >= 0.8
+
+
 def parse_reliquat(ocr_text):
     m = RELIQUAT_RE.search(ocr_text)
     return float(m.group(1).replace(",", ".")) if m else None
@@ -304,10 +309,10 @@ class Session:
         # objet different (moins de la moitie des lignes en commun) -> on repart a zero
         common = set(self.values) & set(new_values)
         if len(common) < max(1, len(self.values) // 2):
-            goal, os_, ot, lvl = self.goal, self.over_stat, self.over_target, self.level
+            goal, os_, ot, lvl, tg = self.goal, self.over_stat, self.over_target, self.level, self.targets
             self.__init__()
             self.goal, self.over_stat, self.over_target, self.level = goal, os_, ot, lvl
-            self.log.insert(0, "Nouvel objet : fourchettes remises au max du jeu")
+            self.targets = {k: v for k, v in tg.items() if k in new_values}
             self.update(new_values)
             self.log.insert(0, "Nouvel objet détecté, puits remis à 0")
             return False
