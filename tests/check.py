@@ -67,4 +67,12 @@ case("exo PA", {}, "PA", "Ga Pa", 200, (1, 0, 99))
 case("niveau < 170", {}, "Vitalité", "Ra Vi", 150, (25.7, 50, 24.3))
 case("plafond de 101 de poids", {"Puissance": 50}, "% Dommages aux sorts", "Do Per So", 200, (0, 0, 0))
 
+# 4. Les min / max voulus survivent à une lecture partielle (fenêtre cachée) et à un changement d'objet
+S = fm_core.Session()
+S.update(dict(v))
+S.targets["Vitalité"] = (420, 450)
+assert S.update({"Tacle": 9, "Retrait PM": 13}) is False and S.values == v, "lecture partielle prise pour un objet"
+S.update({"Force": 50, "Agilité": 40, "Sagesse": 10})
+assert S.targets.get("Vitalité") == (420, 450), "fourchettes effacées au changement d'objet"
+
 print("Tous les tests passent.")

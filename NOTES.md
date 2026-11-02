@@ -1,7 +1,6 @@
-**Correction : mise à jour depuis l'application**
-- Le bouton **« Mettre à jour »** reste visible : un long texte de nouveautés le poussait hors de la fenêtre. Le bandeau entier est aussi cliquable.
-- La mise à jour installe la nouvelle version et la relance (avant, elle pouvait planter au redémarrage).
-- Dossier protégé : la nouvelle version est déposée dans **Téléchargements**. En cas d'échec, un bouton **« Ouvrir la page »** mène au téléchargement.
+**Correction**
+- Les **min / max voulus ne se remettent plus au max du jeu**. Quand la fenêtre de FM était en partie cachée (infobulle, animation, autre fenêtre), l'assistant croyait à un nouvel objet et effaçait tes valeurs. Une lecture partielle est maintenant ignorée, et un vrai changement d'objet ne les efface plus.
 
 **Depuis la 1.0.4**
+- Bouton « Mettre à jour » toujours visible, et mise à jour qui relance bien la nouvelle version.
 - Chances SC / SN / EC identiques au simulateur dofocus.fr.

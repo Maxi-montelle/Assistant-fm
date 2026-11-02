@@ -385,10 +385,13 @@ class Session:
         # objet different (moins de la moitie des lignes en commun) -> on repart a zero
         common = set(self.values) & set(new_values)
         if len(common) < max(1, len(self.values) // 2):
+            if len(set(new_values) - set(self.values)) < 2:
+                return False  # lecture partielle (fenêtre cachée) : on ne touche à rien
+            # les fourchettes voulues sont gardées : c'est l'appli qui charge celles de chaque objet
             goal, os_, ot, lvl, tg = self.goal, self.over_stat, self.over_target, self.level, self.targets
             self.__init__()
             self.goal, self.over_stat, self.over_target, self.level = goal, os_, ot, lvl
-            self.targets = {k: v for k, v in tg.items() if k in new_values}
+            self.targets = dict(tg)
             self.update(new_values)
             self.log.insert(0, "Nouvel objet détecté, puits remis à 0")
             return False

@@ -677,6 +677,8 @@ def run_app():
         Elle n'est retirée que si elle manque MISS_LIMIT lectures d'affilée."""
         known, miss = state["known"], state["miss"]
         if known and len(set(vals) & set(known)) < max(1, len(known) // 2):
+            if len(set(vals) - set(known)) < 2:
+                return None  # peu de lignes, toutes déjà connues : fenêtre en partie cachée, pas un nouvel objet
             known.clear()  # nouvel objet
             miss.clear()
             state["order"] = []
@@ -707,6 +709,9 @@ def run_app():
         if vals:
             nread = len(vals)
             vals = stabilize(vals)
+            if vals is None:
+                status.config(text=f"⚠ Seulement {nread} ligne(s) lue(s) : fenêtre de FM en partie cachée ? Lecture ignorée.", fg=GOLD)
+                return
         if not vals:
             status.config(text="⚠ Aucune stat lue : vérifie la zone (📐) et que la fenêtre de FM est ouverte.", fg=RED)
             return
