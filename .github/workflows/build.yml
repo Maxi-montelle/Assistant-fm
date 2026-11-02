@@ -71,6 +71,22 @@ jobs:
           $p = Start-Process -FilePath dist\AssistantFM.exe -ArgumentList "--checkupdate" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "l'exe ne trouve pas les mises à jour ($($p.ExitCode))" }
 
+      - name: Vérifier la mise à jour depuis l'appli (dossier avec accents et espaces)
+        shell: pwsh
+        run: |
+          $d = Join-Path $env:RUNNER_TEMP "Clément FM test"
+          New-Item -ItemType Directory -Force -Path $d | Out-Null
+          Copy-Item dist\AssistantFM.exe (Join-Path $d "AssistantFM.exe")
+          Copy-Item dist\AssistantFM.exe (Join-Path $env:RUNNER_TEMP "nouvelle.exe")
+          $marker = Join-Path $env:RUNNER_TEMP "maj_ok.txt"
+          $p = Start-Process -FilePath (Join-Path $d "AssistantFM.exe") -ArgumentList "--updatetest",('"' + (Join-Path $env:RUNNER_TEMP "nouvelle.exe") + '"'),('"' + $marker + '"') -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installation de la mise à jour en échec ($($p.ExitCode))" }
+          for ($i = 0; $i -lt 60 -and -not (Test-Path $marker); $i++) { Start-Sleep -Seconds 1 }
+          if (-not (Test-Path $marker)) { throw "la nouvelle version ne s'est pas relancée" }
+          Get-Content $marker
+          Start-Sleep -Seconds 3
+          if (Test-Path (Join-Path $d "AssistantFM.exe.old")) { throw "l'ancien exe n'a pas été supprimé" }
+
       - uses: actions/upload-artifact@v4
         with:
           name: AssistantFM

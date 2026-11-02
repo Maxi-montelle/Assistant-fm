@@ -760,11 +760,18 @@ def run_app():
 
         def run():
             try:
-                updater.install(url, progress=lambda x: post(lambda kw: upd_lbl.config(**kw), {"text": f"Téléchargement… {x:.0%}"}))
-                post(lambda: (persist(), root.destroy()))
+                res = updater.install(url, progress=lambda x: post(lambda kw: upd_lbl.config(**kw), {"text": f"Téléchargement… {x:.0%}"}))
+                if res == "restart":
+                    post(lambda: (persist(), root.destroy()))
+                else:
+                    post(lambda kw: upd_lbl.config(**kw), {"text": res})
+                    post(lambda kw: upd_btn.config(**kw), {"state": "normal"})
             except Exception as ex:
-                post(lambda kw: upd_lbl.config(**kw), {"text": f"Échec de la mise à jour : {ex}"})
-                post(lambda kw: upd_btn.config(**kw), {"state": "normal"})
+                msg = f"Échec de la mise à jour : {ex}"
+                post(lambda: (sess.log.insert(0, msg), refresh()))
+                post(lambda kw: upd_lbl.config(**kw), {"text": msg + "\nTu peux aussi la télécharger sur GitHub."})
+                post(lambda kw: upd_btn.config(**kw), {"state": "normal", "text": "Ouvrir la page",
+                                                       "command": lambda: updater.webbrowser.open(updater.RELEASES_URL)})
         threading.Thread(target=run, daemon=True).start()
 
     def check_update():
@@ -777,6 +784,7 @@ def run_app():
             post(show_update, info)
         else:
             post(lambda: (sess.log.insert(0, f"Assistant FM v{VERSION} : à jour"), refresh()))
+    threading.Thread(target=updater.cleanup_old, kwargs={"wait": 30}, daemon=True).start()
     threading.Thread(target=check_update, daemon=True).start()
 
     # nouveautés affichées une fois après une mise à jour
@@ -824,8 +832,28 @@ def checkupdate_test():
     sys.exit(0 if info else 5)
 
 
+def updatetest(src, marker):
+    """Utilisé par GitHub : installe `src` par-dessus cet exe comme une vraie mise à jour,
+    la nouvelle version relancée écrit `marker` (preuve qu'elle a bien démarré)."""
+    try:
+        import urllib.request
+        url = "file:" + urllib.request.pathname2url(os.path.abspath(src))
+        res = updater.install(url, args=("--updated", marker))
+        sys.exit(0 if res == "restart" else 6)
+    except Exception as ex:
+        print(ex)
+        sys.exit(7)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) == 2 and sys.argv[1] == "--checkupdate":
+    if len(sys.argv) == 3 and sys.argv[1] == "--updated":
+        updater.cleanup_old(wait=15)
+        with open(sys.argv[2], "w", encoding="utf-8") as f:
+            f.write(f"ok {VERSION} {getattr(sys, '_MEIPASS', '')}")
+        sys.exit(0)
+    elif len(sys.argv) == 4 and sys.argv[1] == "--updatetest":
+        updatetest(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) == 2 and sys.argv[1] == "--checkupdate":
         checkupdate_test()
     elif len(sys.argv) == 3 and sys.argv[1] == "--selftest":
         selftest(sys.argv[2])
