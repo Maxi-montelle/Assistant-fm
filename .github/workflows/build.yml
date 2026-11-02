@@ -1,0 +1,67 @@
+name: Construire AssistantFM.exe
+
+# Une nouvelle version est publiée quand une étiquette « vX.Y.Z » est envoyée.
+# On peut aussi lancer la construction à la main (onglet Actions) pour tester.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Installer Tesseract
+        run: choco install tesseract -y --no-progress
+
+      - name: Copier Tesseract dans le projet (sans ses langues, on fournit le français)
+        shell: pwsh
+        run: |
+          $src = "C:\Program Files\Tesseract-OCR"
+          New-Item -ItemType Directory -Force -Path build_tess | Out-Null
+          Get-ChildItem $src -File | Copy-Item -Destination build_tess
+          Get-ChildItem build_tess | Measure-Object | Select-Object -ExpandProperty Count
+
+      - name: Tests (lecture des captures + chances DoFocus)
+        env:
+          PATH_TESS: C:\Program Files\Tesseract-OCR
+        run: python tests/check.py
+
+      - name: Construire l'exe
+        run: >
+          pyinstaller --noconfirm --onefile --windowed --name AssistantFM
+          --add-data "tessdata;tessdata"
+          --add-data "build_tess;tesseract"
+          fm_live.py
+
+      - name: Vérifier l'exe (lecture d'une capture)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\AssistantFM.exe -ArgumentList "--selftest","tests\fenetre.png" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "selftest de l'exe en échec ($($p.ExitCode))" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AssistantFM
+          path: dist/AssistantFM.exe
+
+      - name: Publier la version
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/AssistantFM.exe
+          body_path: NOTES.md

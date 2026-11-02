@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+config.json
+debug_*
+build/
+build_tess/
+dist/
+*.spec
