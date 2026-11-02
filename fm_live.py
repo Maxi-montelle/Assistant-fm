@@ -742,15 +742,21 @@ def run_app():
 
     pump()
     upd_bar = tk.Frame(root, bg="#2e3a4a")
-    upd_lbl = tk.Label(upd_bar, text="", bg="#2e3a4a", fg=FG, font=F["bold"], anchor="w", justify="left")
-    upd_lbl.pack(side="left", padx=8, pady=4, fill="x", expand=True)
+    # le bouton est placé AVANT le texte : un long texte ne peut plus le pousser hors de la fenêtre
     upd_btn = btn(upd_bar, "Mettre à jour", None)
     upd_btn.pack(side="right", padx=6, pady=4)
+    upd_lbl = tk.Label(upd_bar, text="", bg="#2e3a4a", fg=FG, font=F["bold"], anchor="w", justify="left",
+                       wraplength=260, cursor="hand2")
+    upd_lbl.pack(side="left", padx=8, pady=4, fill="x", expand=True)
+    upd_lbl.bind("<Button-1>", lambda e: upd_btn.invoke() if str(upd_btn["state"]) != "disabled" else None)
+    upd_bar.bind("<Configure>", lambda e: upd_lbl.config(wraplength=max(120, e.width - upd_btn.winfo_width() - 30)))
 
     def show_update(info):
         ver, url, notes = info
         notes = "\n".join(l.strip() for l in notes.replace("**", "").replace("\r", "").splitlines() if l.strip())
-        upd_lbl.config(text=f"⬇ Version {ver} disponible" + (f"\n{notes[:200]}" if notes else ""))
+        first = notes.splitlines()[1] if len(notes.splitlines()) > 1 else notes
+        upd_lbl.config(text=f"⬇ Version {ver} disponible : clique ici ou sur « Mettre à jour »"
+                            + (f"\n{first[:120]}" if first else ""))
         upd_btn.config(command=lambda: do_update(url))
         upd_bar.pack(fill="x", padx=10, pady=(0, 4), after=top)
 
