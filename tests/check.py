@@ -75,4 +75,10 @@ assert S.update({"Tacle": 9, "Retrait PM": 13}) is False and S.values == v, "lec
 S.update({"Force": 50, "Agilité": 40, "Sagesse": 10})
 assert S.targets.get("Vitalité") == (420, 450), "fourchettes effacées au changement d'objet"
 
+# 5. Cases vides = max du jeu, sans jamais réécrire ce que le joueur a tapé
+S.targets = {"Vitalité": (420, None), "Sagesse": (None, 38)}
+S.maxes.update({"Vitalité": 450, "Sagesse": 40})
+assert S.target("Vitalité") == (420, 450) and S.target("Sagesse") == (38, 38) and S.target("Force") == (S.maxes.get("Force", 0),) * 2
+assert S.targets["Vitalité"] == (420, None)
+
 print("Tous les tests passent.")

@@ -18,7 +18,8 @@ Une petite fenêtre reste au-dessus du jeu. Elle lit les stats de ton objet dans
 2. Dans l'assistant, clique sur **📐 Zone** et encadre **toute la fenêtre de forgemagie** : l'historique à gauche, le reliquat et le tableau. Le programme repère tout seul les colonnes « Min » et « Modif. ». Il lit séparément l'historique (le nom de l'objet et le résultat de chaque rune) et le tableau (les valeurs, les max et le reliquat), et ignore les colonnes de runes.
    *(Le bouton 📜 Histo reste disponible si tu préfères encadrer l'historique à part.)*
 3. Choisis ton objectif : Jet parfait, Exo PA / PM / PO ou Over. Pour un over, choisis la ligne et la valeur visée. **% Dommages aux sorts** est toujours proposé, même si l'objet ne l'a pas.
-4. Les max sont lus dans la colonne Max. Si l'un d'eux est faux, corrige-le dans la petite case, puis appuie sur Entrée.
+4. Les max sont lus dans la colonne Max. Si l'un d'eux est faux, corrige-le dans la case « Max jeu ».
+   Dans « Min voulu » / « Max voulu », tape les valeurs que tu vises : elles restent telles quelles. Une case vide veut dire « le max du jeu ».
 5. Passe la rune affichée en doré. L'assistant voit le changement, met à jour le puits, note le résultat et affiche la rune suivante.
 
 - **⏸** met la lecture en pause, par exemple pendant que tu changes d'objet.

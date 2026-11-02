@@ -1,6 +1,5 @@
-**Correction**
-- Les **min / max voulus ne se remettent plus au max du jeu**. Quand la fenêtre de FM était en partie cachée (infobulle, animation, autre fenêtre), l'assistant croyait à un nouvel objet et effaçait tes valeurs. Une lecture partielle est maintenant ignorée, et un vrai changement d'objet ne les efface plus.
-
-**Depuis la 1.0.4**
-- Bouton « Mettre à jour » toujours visible, et mise à jour qui relance bien la nouvelle version.
-- Chances SC / SN / EC identiques au simulateur dofocus.fr.
+**Min / max voulus**
+- Les cases **Min voulu / Max voulu ne sont plus jamais remplies avec le max du jeu**. Elles contiennent seulement ce que tu tapes, et ça ne bouge plus.
+- **Case vide** = l'assistant vise le max du jeu (sans l'écrire dans la case).
+- Ce que tu es en train de taper n'est plus perdu quand le tableau se redessine.
+- Le bouton « ✖ Effacer mes valeurs » vide toutes tes cases.

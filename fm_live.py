@@ -279,7 +279,7 @@ def run_app():
 
     def persist():
         cfg["maxes"] = sess.maxes
-        cfg["targets"] = {k: list(v) for k, v in sess.targets.items()}
+        cfg["targets"] = {k: list(v) for k, v in sess.targets.items()}  # null = case vide
         if state.get("item"):
             cfg.setdefault("targets_by_item", {})[fm_core.norm(state["item"])] = cfg["targets"]
         cfg["max_fix"] = max_fix
@@ -292,25 +292,20 @@ def run_app():
         save_config(cfg)
 
     def set_target(stat, e_lo, e_hi):
-        if not e_lo.get().strip() and not e_hi.get().strip():
-            sess.targets.pop(stat, None)
-            persist()
-            refresh()
-            return
-        t_lo, t_hi = e_lo.get().strip(), e_hi.get().strip()
-        try:
-            lo = int(t_lo or t_hi)
-            hi = int(t_hi or t_lo)
-        except ValueError:
-            return
+        """Enregistre exactement ce que le joueur a tapé (case vide = rien de choisi)."""
+        def num(e):
+            t = e.get().strip()
+            return int(t) if t.lstrip("-").isdigit() else None
+        if any(e.get().strip() and num(e) is None for e in (e_lo, e_hi)):
+            return  # saisie pas encore valable (ex. « - » seul)
         e_lo.dirty = e_hi.dirty = False
-        hi = max(lo, hi)
-        if sess.target(stat) != (lo, hi):
-            m = sess.maxes.get(stat, 0)
-            if (lo, hi) == (m, m):
+        lo, hi = num(e_lo), num(e_hi)
+        new = None if lo is None and hi is None else (lo, hi)
+        if sess.targets.get(stat) != new:
+            if new is None:
                 sess.targets.pop(stat, None)
             else:
-                sess.targets[stat] = (lo, hi)
+                sess.targets[stat] = new
             persist()
             refresh()
 
@@ -388,6 +383,7 @@ def run_app():
             if e.dirty:
                 e.dirty = False
                 on_commit()
+        e.commit = commit
         e.bind("<KeyRelease>", typed)
         e.bind("<Return>", commit)
         e.bind("<KP_Enter>", commit)
@@ -395,6 +391,13 @@ def run_app():
         return e
 
     def build_table(order):
+        # ce que le joueur est en train de taper est enregistré AVANT de redessiner le tableau
+        for r in list(rows.values()):
+            for k in ("max", "lo", "hi"):
+                if getattr(r.get(k), "dirty", False):
+                    r[k].commit()
+        focus = root.focus_get()
+        refocus = next(((s_, k) for s_, r in rows.items() for k in ("max", "lo", "hi") if r.get(k) is focus), None)
         rows.clear()
         for w in lines_fr.winfo_children():
             w.destroy()
@@ -417,11 +420,13 @@ def run_app():
             r["sc"] = tk.Label(lines_fr, text="", bg=BG, font=F["small"], width=5)
             r["sc"].grid(row=i, column=6, sticky="we")
             rows[s] = r
+        if refocus and refocus[0] in rows:
+            rows[refocus[0]][refocus[1]].focus_set()
         if order:
-            tk.Label(lines_fr, text="Tape tes valeurs : elles sont gardées toutes seules. Max jeu faux ? Corrige-le (vide = relu à l'écran).",
+            tk.Label(lines_fr, text="Tape tes min / max voulus : ils sont gardés tels quels (case vide = max du jeu). Max jeu faux ? Corrige-le (vide = relu à l'écran).",
                      fg=MUT, bg=BG, font=F["small"], anchor="w", wraplength=300, justify="left").grid(
                 row=len(order) + 1, column=0, columnspan=4, sticky="w", pady=(4, 0))
-            btn(lines_fr, "↺ Max du jeu partout", reset_targets).grid(row=len(order) + 1, column=4, columnspan=3, sticky="e", pady=(4, 0))
+            btn(lines_fr, "✖ Effacer mes valeurs", reset_targets).grid(row=len(order) + 1, column=4, columnspan=3, sticky="e", pady=(4, 0))
 
     def refresh():
         rune, why = sess.advise()
@@ -467,10 +472,10 @@ def run_app():
             fixed = s in max_fix
             r["max"].config(font=F["bold"] if fixed else F["txt"], bg="#4a2e2e" if fixed else rbg, fg=FG if fixed else MUT)
             set_entry(r["max"], m)
-            custom = s in sess.targets
-            for e, val in ((r["lo"], lo), (r["hi"], hi)):
-                e.config(font=F["bold"] if custom else F["txt"], bg="#2e3a4a" if custom else BG2)
-                set_entry(e, val)
+            mine = sess.targets.get(s, (None, None))
+            for e, val in ((r["lo"], mine[0]), (r["hi"], mine[1])):
+                e.config(font=F["bold"] if val is not None else F["txt"], bg="#2e3a4a" if val is not None else BG2)
+                set_entry(e, "" if val is None else val)
             r["etat"].config(text=etat, fg=col, bg=rbg)
             if s in fm_core.STATS:
                 gap = max(1, hi - v) if v < hi else 1
@@ -642,12 +647,12 @@ def run_app():
         if item and state["item"] and not fm_core.same_item(item, state["item"]):
             state["item_cand"] = None
             persist()  # garde les fourchettes de l'ancien objet
-            goal, ost, otg, lvl = sess.goal, sess.over_stat, sess.over_target, sess.level
+            goal, ost, otg, lvl, tg = sess.goal, sess.over_stat, sess.over_target, sess.level, dict(sess.targets)
             sess.__init__()
             sess.goal, sess.over_stat, sess.over_target, sess.level = goal, ost, otg, lvl
+            # valeurs déjà tapées pour cet objet, sinon on garde les tiennes (jamais de retour au max)
             saved = cfg.get("targets_by_item", {}).get(fm_core.norm(item))
-            if saved:
-                sess.targets.update({k: tuple(v) for k, v in saved.items()})
+            sess.targets.update({k: tuple(v) for k, v in saved.items()} if saved else tg)
             state["known"].clear(); state["miss"].clear(); state["stable"] = None; state["order"] = []
             state["hist"] = []
             sess.log.insert(0, f"🎮 Nouvel objet : {item}")

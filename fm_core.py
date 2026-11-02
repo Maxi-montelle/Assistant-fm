@@ -418,9 +418,14 @@ class Session:
 
     # ---------- conseils ----------
     def target(self, s):
-        """Fourchette voulue (min, max) : celle du joueur, sinon le max du jeu."""
+        """Fourchette visée (min, max). Ce que le joueur a tapé ; une case vide = le max du jeu.
+        Les valeurs tapées ne sont jamais remplacées par le max."""
         m = self.maxes.get(s, 0)
-        lo, hi = self.targets.get(s, (m, m))
+        lo, hi = self.targets.get(s, (None, None))
+        if hi is None:
+            hi = m if lo is None else max(lo, m)
+        if lo is None:
+            lo = hi
         return lo, max(lo, hi)
 
     def _lines(self):
