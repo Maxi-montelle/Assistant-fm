@@ -65,6 +65,12 @@ jobs:
           $p = Start-Process -FilePath dist\AssistantFM.exe -ArgumentList "--selftest","tests\fenetre.png" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "selftest de l'exe en échec ($($p.ExitCode))" }
 
+      - name: Vérifier que l'exe trouve les mises à jour
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\AssistantFM.exe -ArgumentList "--checkupdate" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "l'exe ne trouve pas les mises à jour ($($p.ExitCode))" }
+
       - uses: actions/upload-artifact@v4
         with:
           name: AssistantFM

@@ -339,6 +339,25 @@ def run_app():
                 w.config(bg=colors[n])
             root.after(140, flash, n + 1)
 
+    import queue
+    ui_q = queue.Queue()
+
+    def post(fn, *args):
+        """Depuis un thread : demande à la fenêtre d'exécuter fn(*args) (Tkinter n'est pas thread-safe)."""
+        ui_q.put((fn, args))
+
+    def pump():
+        try:
+            while True:
+                fn, args = ui_q.get_nowait()
+                try:
+                    fn(*args)
+                except Exception as ex:
+                    status.config(text=f"Erreur interne : {ex}", fg=RED)
+        except queue.Empty:
+            pass
+        root.after(50, pump)
+
     rows = {}
 
     def set_entry(e, val):
@@ -591,13 +610,13 @@ def run_app():
                         with open(os.path.join(HERE, "debug_texte.txt"), "w", encoding="utf-8") as f:
                             f.write(f"Zone : {state['region']}\n\n{text}\n\nStats : {vals}\nMax : {ranges}\nReliquat : {rel}\n"
                                     f"\n--- Historique ({state.get('hist_region')}) ---\n{hist_text}\n")
-                        root.after(0, status.config, {"text": "🔍 debug_capture.png et debug_texte.txt enregistrés dans le dossier du programme.", "fg": "#6aa8e0"})
+                        post(lambda kw: status.config(**kw), {"text": "🔍 debug_capture.png et debug_texte.txt enregistrés dans le dossier du programme.", "fg": "#6aa8e0"})
                         continue
                 except Exception as ex:
-                    root.after(0, status.config, {"text": f"Erreur de lecture : {ex}"})
+                    post(lambda kw: status.config(**kw), {"text": f"Erreur de lecture : {ex}"})
                     continue
-                root.after(0, handle_hist, hist_text)
-                root.after(0, handle, vals, ranges, rel)
+                post(handle_hist, hist_text)
+                post(handle, vals, ranges, rel)
 
     def handle_hist(text):
         """Lit le panneau Historique : nom de l'objet + une ligne par effet de rune."""
@@ -717,6 +736,7 @@ def run_app():
         persist()
         refresh()
 
+    pump()
     upd_bar = tk.Frame(root, bg="#2e3a4a")
     upd_lbl = tk.Label(upd_bar, text="", bg="#2e3a4a", fg=FG, font=F["bold"], anchor="w", justify="left")
     upd_lbl.pack(side="left", padx=8, pady=4, fill="x", expand=True)
@@ -725,6 +745,7 @@ def run_app():
 
     def show_update(info):
         ver, url, notes = info
+        notes = "\n".join(l.strip() for l in notes.replace("**", "").replace("\r", "").splitlines() if l.strip())
         upd_lbl.config(text=f"⬇ Version {ver} disponible" + (f"\n{notes[:200]}" if notes else ""))
         upd_btn.config(command=lambda: do_update(url))
         upd_bar.pack(fill="x", padx=10, pady=(0, 4), after=top)
@@ -735,20 +756,23 @@ def run_app():
 
         def run():
             try:
-                updater.install(url, progress=lambda x: root.after(0, upd_lbl.config, {"text": f"Téléchargement… {x:.0%}"}))
-                root.after(0, lambda: (persist(), root.destroy()))
+                updater.install(url, progress=lambda x: post(lambda kw: upd_lbl.config(**kw), {"text": f"Téléchargement… {x:.0%}"}))
+                post(lambda: (persist(), root.destroy()))
             except Exception as ex:
-                root.after(0, upd_lbl.config, {"text": f"Échec de la mise à jour : {ex}"})
-                root.after(0, upd_btn.config, {"state": "normal"})
+                post(lambda kw: upd_lbl.config(**kw), {"text": f"Échec de la mise à jour : {ex}"})
+                post(lambda kw: upd_btn.config(**kw), {"state": "normal"})
         threading.Thread(target=run, daemon=True).start()
 
     def check_update():
         try:
             info = updater.check_latest()
-        except Exception:
-            info = None
+        except Exception as ex:
+            post(lambda: (sess.log.insert(0, f"Mise à jour : vérification impossible ({ex})"), refresh()))
+            return
         if info:
-            root.after(0, show_update, info)
+            post(show_update, info)
+        else:
+            post(lambda: (sess.log.insert(0, f"Assistant FM v{VERSION} : à jour"), refresh()))
     threading.Thread(target=check_update, daemon=True).start()
 
     # nouveautés affichées une fois après une mise à jour
@@ -785,8 +809,21 @@ def selftest(path):
         sys.exit(3)
 
 
+def checkupdate_test():
+    """Utilisé par GitHub : se fait passer pour une très vieille version et vérifie
+    que l'exe voit bien la dernière version publiée (réseau + certificats OK)."""
+    updater.VERSION = "0.0.1"
+    try:
+        info = updater.check_latest(timeout=20)
+    except Exception:
+        sys.exit(4)
+    sys.exit(0 if info else 5)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == "--selftest":
+    if len(sys.argv) == 2 and sys.argv[1] == "--checkupdate":
+        checkupdate_test()
+    elif len(sys.argv) == 3 and sys.argv[1] == "--selftest":
         selftest(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == "--test":
         test_mode(sys.argv[2])
