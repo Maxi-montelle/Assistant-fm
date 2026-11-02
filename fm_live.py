@@ -354,10 +354,18 @@ def run_app():
         e.dirty = False
 
         def typed(ev):
-            if ev.keysym not in ("Return", "Tab", "KP_Enter"):
-                e.dirty = True
+            if ev.keysym in ("Return", "Tab", "KP_Enter"):
+                return
+            e.dirty = True
+            # enregistré tout seul dès que tu arrêtes de taper (pas besoin d'Entrée)
+            if getattr(e, "_job", None):
+                root.after_cancel(e._job)
+            e._job = root.after(700, commit)
 
         def commit(ev=None):
+            if getattr(e, "_job", None):
+                root.after_cancel(e._job)
+                e._job = None
             if e.dirty:
                 e.dirty = False
                 on_commit()
@@ -391,7 +399,7 @@ def run_app():
             r["sc"].grid(row=i, column=6, sticky="we")
             rows[s] = r
         if order:
-            tk.Label(lines_fr, text="Tape tes valeurs : validé avec Entrée ou en cliquant ailleurs. Max jeu faux ? Corrige-le (vide = relu à l'écran).",
+            tk.Label(lines_fr, text="Tape tes valeurs : elles sont gardées toutes seules. Max jeu faux ? Corrige-le (vide = relu à l'écran).",
                      fg=MUT, bg=BG, font=F["small"], anchor="w", wraplength=300, justify="left").grid(
                 row=len(order) + 1, column=0, columnspan=4, sticky="w", pady=(4, 0))
             btn(lines_fr, "↺ Max du jeu partout", reset_targets).grid(row=len(order) + 1, column=4, columnspan=3, sticky="e", pady=(4, 0))
