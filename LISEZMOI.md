@@ -61,5 +61,6 @@ SC = (100 − difficulté) / 2, jamais sous 2 %. SN = 50 % tant que la difficult
 **Plafonds** : le jeu refuse une rune qui ferait dépasser 101 de poids à une ligne, ou à la somme des overs et des exos. L'assistant affiche alors « Rune bloquée ».
 
 Ce que l'assistant en tire :
+- **Over et exo en dernier** : il monte d'abord toutes les lignes jusqu'à ton min voulu (sans dépasser le max du jeu), puis seulement il passe à l'over ou à l'exo. Une fois cette phase lancée, il ne revient pas remonter les lignes que la création de reliquat fait baisser : il finit l'over / l'exo, puis répare.
 - **Il monte d'abord les lignes qui restent sous 80 % de leur jet après la rune** : environ 45 % de SC, contre 25 % au-dessus.
 - **Il choisit la qualité de rune avec le plus de SC**, puis celle qui a le moins d'EC.

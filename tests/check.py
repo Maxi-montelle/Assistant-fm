@@ -81,4 +81,19 @@ S.maxes.update({"Vitalité": 450, "Sagesse": 40})
 assert S.target("Vitalité") == (420, 450) and S.target("Sagesse") == (38, 38) and S.target("Force") == (S.maxes.get("Force", 0),) * 2
 assert S.targets["Vitalité"] == (420, None)
 
+# 6. Over / exo seulement après avoir monté les lignes à leur min voulu
+for goal, extra in (("over", {"over_stat": "Tacle", "over_target": 17}), ("exo-PA", {})):
+    S = fm_core.Session()
+    S.update({"Vitalité": 300, "Tacle": 15, "Sagesse": 20})
+    S.maxes.update({"Vitalité": 450, "Tacle": 15, "Sagesse": 40})
+    S.targets = {"Vitalité": (400, None), "Sagesse": (34, None)}
+    S.goal = goal
+    for k, x in extra.items():
+        setattr(S, k, x)
+    rune, why = S.advise()
+    assert rune.endswith("sur Vitalité") or rune.endswith("sur Sagesse"), (goal, rune)
+    S.update({"Vitalité": 400, "Tacle": 15, "Sagesse": 34})
+    rune, why = S.advise()
+    assert "Vitalité" not in rune and "Sagesse" not in rune or "reliquat" in why, (goal, rune, why)
+
 print("Tous les tests passent.")

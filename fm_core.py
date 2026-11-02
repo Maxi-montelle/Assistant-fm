@@ -372,6 +372,7 @@ class Session:
         self.level = 200     # niveau de l'objet (formule de chances)
         self.mins = {}       # colonne Min du jeu
         self.last_chances = None
+        self.prep_done = False  # lignes montées à leur min voulu : place aux overs / exos
 
     def update(self, new_values, reliquat=None):
         """Appelee quand une nouvelle lecture STABLE differe de la precedente.
@@ -431,26 +432,56 @@ class Session:
     def _lines(self):
         return [(s, self.values.get(s, 0), self.target(s)[1]) for s in self.values]
 
-    def _advise_jet(self, exclude=None):
-        todo = []
+    def _todo(self, exclude=None):
+        """Lignes sous leur min voulu, en deux groupes :
+        - normal : à monter SANS dépasser le max du jeu (jusqu'à min(min voulu, max du jeu)) ;
+        - over   : déjà au max du jeu mais visées plus haut (over), ou sans jet (exo)."""
+        normal, over = [], []
         for s, c in self.values.items():
+            if s == exclude:
+                continue
             lo, hi = self.target(s)
-            if c < lo and s != exclude:
-                todo.append((s, c, lo, hi))
+            if c >= lo:
+                continue
+            gm = self.maxes.get(s, 0)
+            if gm > 0 and c < gm:
+                normal.append((s, c, min(lo, gm), min(hi, gm)))
+            else:
+                over.append((s, c, lo, hi))
+        return normal, over
+
+    def _prep_ok(self, exclude=None):
+        """Vrai une fois toutes les lignes montées à leur min voulu (sans over).
+        Ensuite on reste en phase over / exo, même si le reliquat généré fait baisser des lignes :
+        sinon on remonterait les lignes en boucle sans jamais garder de reliquat."""
+        key = (self.goal, self.over_stat, self.over_target)
+        if getattr(self, "_prep_key", None) != key:
+            self._prep_key, self.prep_done = key, False
+        if not self.prep_done and not self._todo(exclude)[0]:
+            self.prep_done = True
+        return self.prep_done
+
+    def _advise_jet(self, exclude=None, overs=True):
+        normal, over = self._todo(exclude)
+        if over and overs and (not normal or getattr(self, "prep_done", False)):
+            self.prep_done = True
+            todo = over
+        else:
+            todo = normal
         if not todo:
             return None
         # D'après la formule : sous 80 % du max, une rune passe ~47 % du temps -> on monte
         # d'abord toutes les lignes ensemble jusqu'à 80 %, puis on finit par les plus faciles.
         def score(x):
             st, cur, lo_, hi_ = x
-            r_ = smart_rune(st, hi_ - cur, self.values, self.maxes, self.level, self.mins)
+            r_ = smart_rune(st, max(1, hi_ - cur), self.values, self.maxes, self.level, self.mins)
             sc_ = chances(self.values, self.maxes, st, r_, self.level, self.mins)[0]
             m_ = self.maxes.get(st, 0)
             under80 = m_ > 0 and cur < 0.8 * m_
             return (0 if under80 else 1, -sc_, -weight(st))
         todo.sort(key=score)
         s, c, lo, hi = todo[0]
-        r = smart_rune(s, hi - c, self.values, self.maxes, self.level, self.mins)
+        r = smart_rune(s, max(1, hi - c), self.values, self.maxes, self.level, self.mins)
         m80 = self.maxes.get(s, 0)
         if m80 > 0 and c < 0.8 * m80:  # ne pas franchir 80 % avec une grosse rune si une plus petite y arrive pile
             gap80 = int(0.8 * m80) - c
@@ -459,7 +490,8 @@ class Session:
                 if r2[1] <= gap80 and chances(self.values, self.maxes, s, r2, self.level, self.mins)[0] >= \
                         chances(self.values, self.maxes, s, r, self.level, self.mins)[0]:
                     r = r2
-        rng = f"{lo}" if lo == hi else f"{lo}–{hi}"
+        ulo, uhi = self.target(s)
+        rng = f"{ulo}" if ulo == uhi else f"{ulo}–{uhi}"
         game_max = self.maxes.get(s, 0)
         if c >= game_max:  # au-dela du max du jeu : c'est un over, il faut du puits
             need = r[1] * weight(s)
@@ -467,12 +499,13 @@ class Session:
                 g = self._generator(exclude=s, need=need - self.puits)
                 if g:
                     return (f"{g[1][0]} sur {g[0]}",
-                            f"{s} : {c}, tu vises {rng} (au-dessus du max du jeu {game_max}). "
+                            f"Lignes à ton min : place à l'over. {s} : {c}, tu vises {rng} (max du jeu {game_max}). "
                             f"Il faut {need:g} de reliquat, tu as {self.puits:g} : génère-en sur {g[0]}.")
             return (f"{r[0]} (+{r[1]}) sur {s}",
                     f"Over : {s} à {c}, tu vises {rng}. Reliquat {self.puits:g} / {need:g} nécessaire.")
+        later = " Les overs viendront après." if over else ""
         return (f"{r[0]} (+{r[1]}) sur {s}",
-                f"{s} : {c}, tu vises {rng} (il manque {lo - c}).")
+                f"{s} : {c}, tu vises {rng} (il manque {lo - c}).{later}")
 
     def _generator(self, exclude=None, need=None):
         c = [(s, v, m) for s, v, m in self._lines() if v >= m > 0 and s != exclude and s not in EXO_STATS]
@@ -515,6 +548,9 @@ class Session:
         return a
 
     def _advise(self):
+        key = (self.goal, self.over_stat, self.over_target)
+        if getattr(self, "_prep_key", None) != key:
+            self._prep_key, self.prep_done = key, False
         if not self.values:
             return ("En attente…", "Ouvre la fenêtre de FM avec ton objet, je lis les stats.")
         P = self.puits
@@ -527,6 +563,10 @@ class Session:
                 if not j:
                     return ("✅ Terminé !", f"Exo {s} passé et tout est au max. Ne repasse plus de rune.")
                 return (j[0], j[1] + f" Exo {s} acquis : petites runes seulement, l'exo peut sauter.")
+            if not self._prep_ok(exclude=s):
+                j = self._advise_jet(exclude=s, overs=False)
+                if j:
+                    return (j[0], j[1] + f" Exo {s} ensuite, une fois les lignes à ton min.")
             if P >= w:
                 return (f"{rn} (exo {s})", f"Reliquat {P:g} ≥ {w:g} : passe l'exo maintenant.")
             g = self._generator(need=w - P)
@@ -541,6 +581,10 @@ class Session:
                 if m <= 0 and c <= 0:
                     return ("Indique la valeur visée", f"{s} n'est pas sur l'objet : tape la valeur voulue dans la case « viser » (ex. 1).")
                 return ("Valeur visée trop basse", f"Pour un over sur {s}, vise plus que {m} (le max du jeu).")
+            if not self._prep_ok(exclude=s):
+                j = self._advise_jet(exclude=s, overs=False)
+                if j:
+                    return (j[0], j[1] + f" Over {s} ensuite, une fois les lignes à ton min.")
             if c < m:
                 r = best_rune(s, m - c)
                 return (f"{r[0]} (+{r[1]}) sur {s}", f"Monte d'abord {s} au max ({c}/{m}).")

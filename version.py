@@ -1,8 +1,9 @@
-VERSION = "1.0.8"
+VERSION = "1.0.9"
 # Projet GitHub d'où viennent les mises à jour (« propriétaire/nom »). Rempli une fois le dépôt créé.
 GITHUB_REPO = "Maxi-montelle/assistant-fm"
 
 CHANGELOG = """\
+1.0.9 — Over et exo conseillés seulement une fois les lignes montées à ton min voulu.
 1.0.8 — Min / max voulus : plus jamais remplacés par le max du jeu (case vide = max).
 1.0.7 — Les min / max voulus ne se remettent plus au max du jeu.
 1.0.6 — Le bouton « Mettre à jour » est toujours visible ; le bandeau est cliquable.
