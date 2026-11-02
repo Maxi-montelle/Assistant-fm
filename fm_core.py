@@ -201,81 +201,157 @@ def smart_rune(stat, gap, values, maxes, level, mins=None):
 
 
 # ===================== Formule de chances =====================
-# Base : vidéo « J'ai CRACKÉ le secret de la forgemagie DOFUS » (DoFocus, ~225 000 clics analysés),
-# puis calée sur les pourcentages affichés par le simulateur dofocus.fr (Heaume de Guerre niv. 200).
+# Reprise à l'identique du simulateur dofocus.fr (code de la page, novembre 2026), lui-même tiré de
+# la vidéo « J'ai PERCÉ le secret de la forgemagie DOFUS » (DoFocus, ~225 000 clics analysés).
 # Ce n'est PAS la formule officielle d'Ankama : c'est une estimation.
 #
-#   difficulté D = 5
-#     + 45   si, APRÈS la rune, la ligne est à 80 % ou plus de son jet (entre min et max)
-#     + 30 + 4 × poids au-dessus du max                     (over ; poids divisé par 2 sur une ligne négative)
-#     + 10,5 × (valeur de la ligne / valeur de la rune − 14)  si ce rapport dépasse 14 (règle du ×14)
-#     + 60 × (qualité des AUTRES lignes)^12                 (qualité = Σ poids actuels / Σ poids max)
-#     − 20   si l'objet est sous le niveau 170
-#   hors over, D est plafonnée à 166.
-#   succès critique = (100 − D) / 2, jamais sous 2 % (sauf objet exo PA/PM/PO)
-#   échec critique  = D / 2
-#   succès neutre   = le reste (50 % tant que D ≤ 96)
+#   Ligne avec un jet (Min / Max) :
+#     difficulté D = 5
+#       + 12 × (valeur actuelle / gain de la rune − 14)   si ce rapport dépasse 14 (règle du ×14)
+#       + 60 × q¹²     q = qualité des AUTRES lignes (Σ poids actuels / Σ poids max), 1 si exo PA ou PM
+#       puis, si la rune fait passer la ligne au-dessus du max (over) : + 65 + 4 × poids au-dessus du max
+#       sinon, si la ligne est à 80 % ou plus de son jet APRÈS la rune : + 45  (pas pour un jet fixe Min = Max)
+#       − 20 × (1,1 − q)   si l'objet est sous le niveau 170
+#     SC = (100 − D) / 2, jamais sous 2 %
+#     SN = 50 % tant que D ≤ 100, puis 50 − 0,375 × (D − 100), jamais sous 15 %
+#          (over : 40 − 0,375 × (D − 100), jamais sous 5 %)
+#     EC = le reste
+#   Ligne absente du jet (exo) : PA / PM / PO → 1 % SC, 0 % SN, 99 % EC ;
+#     autres stats : selon le poids de la ligne après la rune (voir exo_chances).
+#   Plafonds : une ligne ne dépasse pas 101 / poids par point (ou son max s'il est plus haut),
+#     et la somme des overs + exos ne dépasse pas 101 de poids.
 
-def item_quality(values, maxes, exclude=None):
-    """0 = objet vide, 1 = toutes les autres lignes au max (pondéré par le poids)."""
+LEVEL_STEP = 170
+WEIGHT_CAP = 101
+STEP80 = 0.8
+EXO_PA_PM = ("PA", "PM")
+_EPS = 1e-9
+
+
+def _range(stat, maxes, mins):
+    """(min, max) du jet de la ligne, ou None si la ligne n'a pas de jet (exo)."""
+    m = maxes.get(stat, 0)
+    mn = (mins or {}).get(stat)
+    if mn is not None:
+        return min(mn, m), max(mn, m)
+    if m > 0:
+        return 0, m
+    if m < 0:
+        return m, m
+    return None
+
+
+def item_quality(values, maxes, exclude=None, mins=None):
+    """0 = objet vide, 1 = toutes les autres lignes au max (pondéré par le poids).
+    Les lignes sans jet (exo) et les lignes au max négatif ne comptent pas."""
     num = den = 0.0
     for s, v in values.items():
-        m = maxes.get(s, 0)
-        if s == exclude or m <= 0 or s not in STATS:
+        if s == exclude or s not in STATS:
             continue
-        num += weight(s) * max(0, min(v, m))
-        den += weight(s) * m
+        rg = _range(s, maxes, mins)
+        if rg is None or rg[1] < 0:
+            continue
+        num += weight(s) * min(max(0, v), rg[1])
+        den += weight(s) * rg[1]
     return num / den if den else 0.0
 
 
-def has_exo(values, maxes):
-    return any(values.get(s, 0) > 0 and maxes.get(s, 0) <= 0 for s in EXO_STATS)
+def has_exo(values, maxes, mins=None, stats=EXO_PA_PM):
+    """Vrai si l'objet porte un exo PA ou PM (ligne positive sans jet)."""
+    return any(values.get(s, 0) > 0 and _range(s, maxes, mins) is None for s in stats)
+
+
+def exo_chances(stat, weight_after):
+    """Chances d'une rune sur une ligne sans jet (exo), selon le poids de la ligne après la rune."""
+    if stat in EXO_STATS:
+        return 1.0, 0.0, 99.0
+    t = weight_after
+    if t <= 2:
+        n = 57.0
+    elif t <= 15:
+        n = 57 - (t - 2) * 38 / 13
+    elif t < 25:
+        n = 19 - (t - 15) * 1.9
+    else:
+        n = 0.0
+    sc = max(1.0, 0.077 * n)
+    sn = 0.923 * n
+    return sc, sn, 100 - sc - sn
+
+
+def _over_load(values, maxes, mins):
+    """Poids total des overs et des exos de l'objet."""
+    tot = 0.0
+    for s, v in values.items():
+        if s not in STATS or v <= 0:
+            continue
+        rg = _range(s, maxes, mins)
+        tot += (max(0, v - rg[1]) if rg else v) * weight(s)
+    return tot
+
+
+def blocked(values, maxes, stat, rune, mins=None):
+    """Raison pour laquelle le jeu refuse la rune (plafond de poids), sinon None."""
+    w = weight(stat)
+    v = values.get(stat, 0)
+    rg = _range(stat, maxes, mins)
+    cap = int(WEIGHT_CAP / w + _EPS)
+    if rg:
+        cap = max(cap, rg[1])
+    if v + rune[1] > cap:
+        return f"{stat} plafonnée à {cap}"
+    after = dict(values)
+    after[stat] = v + rune[1]
+    if _over_load(after, maxes, mins) > WEIGHT_CAP + _EPS:
+        return f"overs + exos au-delà de {WEIGHT_CAP} de poids"
+    return None
 
 
 def difficulty(values, maxes, stat, rune, level=200, mins=None):
+    """Difficulté de la rune (ligne avec un jet) et indicateur over. None pour une ligne exo."""
     gain = rune[1]
     w = weight(stat)
     v = values.get(stat, 0)
-    m = maxes.get(stat, 0)
-    mn = (mins or {}).get(stat)
+    rg = _range(stat, maxes, mins)
+    if rg is None:
+        return None, False
+    lo, hi = rg
     new = v + gain
-    d = 5.0
-    # palier des 80 % du jet, mesuré après la rune
-    if mn is not None and m > mn:
-        jet = (new - mn) / (m - mn)
-    elif m > 0:
-        jet = new / m
-    else:
-        jet = 9.0
-    if jet >= 0.8:
+    over = new > hi
+    fixed = hi == lo
+    q = 1.0 if has_exo(values, maxes, mins) else item_quality(values, maxes, exclude=stat, mins=mins)
+    d = 5 + 12 * max(0.0, v / gain - 14) + 60 * q ** 12
+    if over:
+        d += 65 + 4 * max(0.0, (new - hi) * w)
+    elif not fixed and (new - lo) / (hi - lo) >= STEP80 - _EPS:
         d += 45
-    # over
-    over = 0.0
-    if new > m:
-        over = (new - max(m, v)) * w * (0.5 if v < 0 else 1)
-        d += 30 + 4 * over
-    # règle du ×14
-    if v > 0 and v / gain > 14:
-        d += 10.5 * (v / gain - 14)
-    # qualité des autres lignes (objet exo PA/PM/PO = parfait)
-    exo = has_exo(values, maxes) and stat not in EXO_STATS
-    q = 1.0 if exo else item_quality(values, maxes, exclude=stat)
-    d += 60 * q ** 12
-    if level < 170:
-        d -= 20
-    if not over:
-        d = min(d, 166.0)
-    return d, exo
+    if level < LEVEL_STEP:
+        d -= 20 * max(0.0, 1.1 - q)
+    return d, over
+
+
+def odds_from_difficulty(d, over=False):
+    sc = max(2.0, (100 - d) / 2)
+    if over:
+        sn = max(5.0, 40 - 0.375 * (d - 100))
+    elif d <= 100:
+        sn = min(50.0, 100 - sc)
+    else:
+        sn = max(15.0, 50 - 0.375 * (d - 100))
+    sn = min(max(sn, 0.0), 100 - sc)
+    return sc, sn, 100 - sc - sn
 
 
 def chances(values, maxes, stat, rune, level=200, mins=None):
-    """Renvoie (succès critique %, succès neutre %, échec critique %, difficulté)."""
-    d, exo = difficulty(values, maxes, stat, rune, level, mins)
-    sc = (100 - d) / 2
-    sc = max(0.0, sc) if exo else max(2.0, sc)
-    sc = min(sc, 50.0)
-    ec = min(max(0.0, d / 2), 100 - sc)
-    sn = max(0.0, 100 - sc - ec)
+    """Renvoie (succès critique %, succès neutre %, échec critique %, difficulté).
+    Difficulté None pour une ligne exo ; (0, 0, 0, None) si le jeu refuse la rune."""
+    if blocked(values, maxes, stat, rune, mins):
+        return 0.0, 0.0, 0.0, None
+    d, over = difficulty(values, maxes, stat, rune, level, mins)
+    if d is None:
+        sc, sn, ec = exo_chances(stat, (values.get(stat, 0) + rune[1]) * weight(stat))
+        return round(sc, 1), round(sn, 1), round(ec, 1), None
+    sc, sn, ec = odds_from_difficulty(d, over)
     return round(sc, 1), round(sn, 1), round(ec, 1), round(d)
 
 
@@ -423,6 +499,10 @@ class Session:
         a = self._advise()
         self.last_advice = a[0]
         sr = self.rune_of(a[0])
+        why = blocked(self.values, self.maxes, sr[0], sr[1], self.mins) if sr else None
+        if why:
+            a = (f"⛔ {a[0]}", f"Le jeu refusera cette rune : {why}. Choisis un autre objectif.")
+            self.last_advice = a[0]
         self.last_chances = chances(self.values, self.maxes, sr[0], sr[1], self.level, self.mins) if sr else None
         return a
 

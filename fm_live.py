@@ -433,7 +433,11 @@ def run_app():
         rune_lbl.config(text=rune)
         why_lbl.config(text=why)
         c3 = sess.last_chances
-        if c3 and not done:
+        if c3 and not done and not any(c3[:3]):
+            ch_sc.config(text="Rune bloquée")
+            ch_sn.config(text="(plafond de poids)")
+            ch_ec.config(text="")
+        elif c3 and not done:
             fmt = lambda x: f"{x:g}".replace(".", ",")
             ch_sc.config(text=f"SC {fmt(c3[0])} %")
             ch_sn.config(text=f"SN {fmt(c3[1])} %")

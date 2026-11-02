@@ -31,7 +31,7 @@ item, entries = fm_core.parse_history(fm_live.ocr(hist))
 assert item == "HEAUME DE GUERRE", item
 assert (-34, "Vitalité") in entries and len(entries) == 8, entries
 
-# 2. Chances comparées au simulateur DoFocus (écart max 3 points)
+# 2. Chances comparées au simulateur DoFocus (valeurs lues sur dofocus.fr, arrondies)
 L = {"Vitalité": (394, 401, 450), "Intelligence": (96, 81, 100), "Sagesse": (25, 31, 40), "% Critique": (5, 4, 5),
      "Portée": (-1, -1, -1), "Dommages Feu": (15, 11, 15), "% Résistance Terre": (5, 7, 10),
      "% Résistance Air": (6, 4, 7), "Tacle": (9, 11, 15), "Retrait PM": (13, 11, 15), "Dommages Critiques": (9, 7, 10)}
@@ -47,6 +47,24 @@ dofocus = [("Vitalité", "Vi", (2, 15, 83)), ("Vitalité", "Pa Vi", (2, 29, 69))
 for st, rn, o in dofocus:
     r = next(x for x in fm_core.runes(st) if x[0] == rn)
     c = fm_core.chances(v, mx, st, r, 200, mn)[:3]
-    assert max(abs(a - b) for a, b in zip(c, o)) <= 3.1, (st, rn, c, o)
+    assert max(abs(a - b) for a, b in zip(c, o)) <= 0.6, (st, rn, c, o)
+
+# 3. Cas particuliers, valeurs données par le code du simulateur dofocus.fr
+def case(name, exos, st, rn, level, o, changes=None):
+    v2, mx2 = dict(v, **(changes or {})), dict(mx)
+    v2.update(exos)
+    for s in exos:
+        mx2[s] = 0
+    r = next(x for x in fm_core.runes(st) if x[0] == rn)
+    c = fm_core.chances(v2, mx2, st, r, level, mn)[:3]
+    assert max(abs(a - b) for a, b in zip(c, o)) <= 0.11, (name, c, o)
+
+case("over", {}, "Dommages Critiques", "Do Cri", 200, (2.6, 42, 55.4), {"Dommages Critiques": 10})
+case("exo PA = objet parfait", {"PA": 1}, "Vitalité", "Ra Vi", 200, (2, 46.3, 51.8))
+case("1er % Do sorts", {}, "% Dommages aux sorts", "Do Per So", 200, (1.5, 17.5, 81))
+case("2e % Do sorts", {"% Dommages aux sorts": 1}, "% Dommages aux sorts", "Do Per So", 200, (1, 0, 99))
+case("exo PA", {}, "PA", "Ga Pa", 200, (1, 0, 99))
+case("niveau < 170", {}, "Vitalité", "Ra Vi", 150, (25.7, 50, 24.3))
+case("plafond de 101 de poids", {"Puissance": 50}, "% Dommages aux sorts", "Do Per So", 200, (0, 0, 0))
 
 print("Tous les tests passent.")

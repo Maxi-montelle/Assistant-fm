@@ -40,19 +40,24 @@ Tu verras le texte lu et les stats reconnues. Envoie-moi le résultat : j'ajuste
 - Les **poids des runes** viennent de Dofus 2 et peuvent différer légèrement dans Dofus 3. Tu peux les modifier dans `fm_core.py`, dans le tableau `STATS`.
 - Ankama ne valide aucun outil tiers. Cet outil reste dans ce qui est toléré (pas d'interaction avec le jeu), mais il est utilisé à tes risques.
 
-## Chances de réussite (formule calée sur DoFocus)
+## Chances de réussite (formule du simulateur DoFocus)
 
 Sous la rune conseillée, l'assistant affiche les chances de **SC** (succès critique), **SN** (succès neutre) et **EC** (échec critique). La colonne **SC** du tableau donne aussi la chance de la meilleure rune sur chaque ligne.
 
-La formule part de la vidéo « J'ai CRACKÉ le secret de la forgemagie DOFUS » (environ 225 000 clics analysés). Elle a ensuite été calée sur les pourcentages du simulateur dofocus.fr : sur 19 runes testées, l'écart est de 3 points au maximum. Ce n'est **pas** la formule officielle d'Ankama.
+La formule est celle du simulateur dofocus.fr, reprise à l'identique (vérifiée sur 3 000 objets tirés au hasard). Le simulateur part de la vidéo « J'ai PERCÉ le secret de la forgemagie DOFUS » (environ 225 000 clics analysés). Ce n'est **pas** la formule officielle d'Ankama.
 
-- La difficulté part de 5, puis :
-  - **+45** si, *après* la rune, la ligne est à 80 % ou plus de son jet (entre Min et Max) ;
-  - **+30, plus 4 par point de poids au-dessus du max** (over) ;
-  - **+10,5 par cran au-delà de 14 ×** (valeur de la ligne / valeur de la rune) ;
-  - **+60 × (qualité des autres lignes)¹²** : un objet presque parfait est beaucoup plus dur à FM, et un exo PA/PM/PO le rend « parfait » d'office ;
-  - **−20** si l'objet est sous le niveau 170 (le niveau se règle en bas de la fenêtre).
-- SC = (100 − difficulté) / 2, jamais sous 2 %. EC = difficulté / 2. SN = le reste.
+**Ligne qui a un jet (Min / Max)** : la difficulté part de 5, puis :
+- **+12 par cran au-delà de 14 ×** (valeur de la ligne / gain de la rune) ;
+- **+60 × (qualité des autres lignes)¹²** : un objet presque parfait est beaucoup plus dur à FM. Un exo **PA ou PM** le rend « parfait » d'office ;
+- **over** (la rune fait dépasser le max) : **+65, plus 4 par point de poids au-dessus du max** ;
+- sinon, **+45** si, *après* la rune, la ligne est à 80 % ou plus de son jet (pas sur une ligne fixe, Min = Max) ;
+- **−20 × (1,1 − qualité)** si l'objet est sous le niveau 170 (le niveau se règle en bas de la fenêtre).
+
+SC = (100 − difficulté) / 2, jamais sous 2 %. SN = 50 % tant que la difficulté reste sous 100, puis baisse (15 % minimum, 5 % en over). EC = le reste.
+
+**Ligne absente du jet (exo)** : PA, PM et PO passent à 1 % (99 % d'échec). Les autres stats dépendent du poids de la ligne après la rune : par exemple 1,5 % de SC pour le premier % Dommages aux sorts, puis 1 %.
+
+**Plafonds** : le jeu refuse une rune qui ferait dépasser 101 de poids à une ligne, ou à la somme des overs et des exos. L'assistant affiche alors « Rune bloquée ».
 
 Ce que l'assistant en tire :
 - **Il monte d'abord les lignes qui restent sous 80 % de leur jet après la rune** : environ 45 % de SC, contre 25 % au-dessus.

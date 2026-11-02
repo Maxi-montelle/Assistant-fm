@@ -1,8 +1,9 @@
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 # Projet GitHub d'où viennent les mises à jour (« propriétaire/nom »). Rempli une fois le dépôt créé.
 GITHUB_REPO = "Maxi-montelle/assistant-fm"
 
 CHANGELOG = """\
+1.0.4 — Chances SC / SN / EC identiques au simulateur DoFocus (over, exo, plafonds, niveau).
 1.0.3 — Le bandeau de mise à jour s'affiche correctement.
 1.0.2 — Min / max voulus enregistrés tout seuls, sans appuyer sur Entrée.
 1.0.1 — Les min / max voulus ne se remettent plus au max du jeu.
