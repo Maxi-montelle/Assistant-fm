@@ -68,7 +68,8 @@ LANG = "fra"
 LOCAL_TESSDATA = os.path.join(BUNDLE, "tessdata")
 TESS_CONFIG = "--psm 6"
 if os.path.exists(os.path.join(LOCAL_TESSDATA, "fra.traineddata")):
-    TESS_CONFIG = f'--psm 6 --tessdata-dir "{LOCAL_TESSDATA}"'
+    # Variable d'environnement plutôt qu'une option : marche aussi avec des espaces dans le chemin (Windows)
+    os.environ["TESSDATA_PREFIX"] = LOCAL_TESSDATA
 
 
 def check_tesseract():
